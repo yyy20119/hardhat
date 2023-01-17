@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use hashbrown::HashMap;
 use rethnet_eth::{
     account::BasicAccount,
@@ -9,6 +8,8 @@ use rethnet_eth::{
 use revm::{Account, AccountInfo, Bytecode, Database, DatabaseCommit, KECCAK_EMPTY};
 
 use crate::DatabaseDebug;
+
+use super::DatabaseError;
 
 #[derive(Clone, Debug)]
 struct RevertedLayers<Layer: Clone> {
@@ -238,9 +239,9 @@ impl LayeredDatabase<RethnetLayer> {
 }
 
 impl Database for LayeredDatabase<RethnetLayer> {
-    type Error = anyhow::Error;
+    type Error = DatabaseError;
 
-    fn basic(&mut self, address: Address) -> anyhow::Result<Option<AccountInfo>> {
+    fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         let account = self
             .iter()
             .find_map(|layer| layer.account_infos.get(&address))
@@ -258,22 +259,17 @@ impl Database for LayeredDatabase<RethnetLayer> {
         })))
     }
 
-    fn code_by_hash(&mut self, code_hash: B256) -> anyhow::Result<Bytecode> {
+    fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
         if code_hash == KECCAK_EMPTY {
             return Ok(Bytecode::new());
         }
 
         self.iter()
             .find_map(|layer| layer.contracts.get(&code_hash).cloned())
-            .ok_or_else(|| {
-                anyhow!(
-                    "Layered database does not contain contract with code hash: {}.",
-                    code_hash,
-                )
-            })
+            .ok_or_else(|| DatabaseError::InvalidCodeHash(code_hash))
     }
 
-    fn storage(&mut self, address: Address, index: U256) -> anyhow::Result<U256> {
+    fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
         Ok(self
             .iter()
             .find_map(|layer| layer.storage.get(&address).map(|storage| storage.as_ref()))
@@ -335,7 +331,7 @@ impl DatabaseCommit for LayeredDatabase<RethnetLayer> {
 }
 
 impl DatabaseDebug for LayeredDatabase<RethnetLayer> {
-    type Error = anyhow::Error;
+    type Error = DatabaseError;
 
     fn account_storage_root(&mut self, address: &Address) -> Result<Option<B256>, Self::Error> {
         Ok(self
@@ -522,7 +518,7 @@ impl DatabaseDebug for LayeredDatabase<RethnetLayer> {
 
             Ok(())
         } else {
-            Err(anyhow!("Unknown state root: {}", state_root))
+            Err(DatabaseError::InvalidStateRoot(*state_root))
         }
     }
 
@@ -585,7 +581,7 @@ impl DatabaseDebug for LayeredDatabase<RethnetLayer> {
             self.revert_to_layer(last_layer_id - 1);
             Ok(())
         } else {
-            Err(anyhow!("No checkpoints to revert."))
+            Err(DatabaseError::CannotRevert)
         }
     }
 }

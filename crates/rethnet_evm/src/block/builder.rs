@@ -1,6 +1,5 @@
 use std::{fmt::Debug, sync::Arc};
 
-use anyhow::bail;
 use rethnet_eth::{
     block::{Header, PartialHeader},
     Address, U256,
@@ -13,30 +12,38 @@ use crate::{
     trace::Trace, HeaderData,
 };
 
+#[derive(Debug, thiserror::Error)]
+pub enum BlockTransactionError {
+    #[error("Transaction has a higher gas limit than the remaining gas in the block")]
+    ExceedsBlockGasLimit,
+}
+
 /// A builder for constructing Ethereum blocks.
-pub struct BlockBuilder<E>
+pub struct BlockBuilder<BE, DE>
 where
-    E: Debug + Send + 'static,
+    BE: Debug + Send + 'static,
+    DE: Debug + Send + 'static,
 {
-    blockchain: Arc<AsyncBlockchain<E>>,
-    state: Arc<AsyncDatabase<E>>,
+    blockchain: Arc<AsyncBlockchain<BE>>,
+    state: Arc<AsyncDatabase<DE>>,
     header: PartialHeader,
     transactions: Vec<TxEnv>,
     cfg: CfgEnv,
 }
 
-impl<E> BlockBuilder<E>
+impl<BE, DE> BlockBuilder<BE, DE>
 where
-    E: Debug + Send + 'static,
+    BE: Debug + Send + 'static,
+    DE: Debug + Send + 'static,
 {
     /// Creates an intance of [`BlockBuilder`], creating a checkpoint in the process.
     pub async fn new(
-        blockchain: Arc<AsyncBlockchain<E>>,
-        db: Arc<AsyncDatabase<E>>,
+        blockchain: Arc<AsyncBlockchain<BE>>,
+        db: Arc<AsyncDatabase<DE>>,
         cfg: CfgEnv,
         parent: Header,
         header: HeaderData,
-    ) -> Result<Self, E> {
+    ) -> Self {
         // TODO: Proper implementation of a block builder
         // db.checkpoint().await?;
 
@@ -48,13 +55,13 @@ where
             ..PartialHeader::default()
         };
 
-        Ok(Self {
+        Self {
             blockchain,
             state: db,
             header,
             transactions: Vec::new(),
             cfg,
-        })
+        }
     }
 
     /// Retrieves the runtime of the [`BlockBuilder`].
@@ -84,10 +91,10 @@ where
     pub async fn add_transaction(
         &mut self,
         transaction: TxEnv,
-    ) -> anyhow::Result<(ExecutionResult, Trace)> {
+    ) -> Result<(ExecutionResult, Trace), BlockTransactionError> {
         //  transaction's gas limit cannot be greater than the remaining gas in the block
         if U256::from(transaction.gas_limit) > self.gas_remaining() {
-            bail!("tx has a higher gas limit than the remaining gas in the block");
+            return Err(BlockTransactionError::ExceedsBlockGasLimit);
         }
 
         self.transactions.push(transaction.clone());
@@ -132,7 +139,7 @@ where
 
     /// Finalizes the block, returning the state root.
     /// TODO: Build a full block
-    pub async fn finalize(self, rewards: Vec<(Address, U256)>) -> Result<(), E> {
+    pub async fn finalize(self, rewards: Vec<(Address, U256)>) -> Result<(), DE> {
         for (address, reward) in rewards {
             self.state
                 .modify_account(
@@ -146,7 +153,7 @@ where
     }
 
     /// Aborts building of the block, reverting all transactions in the process.
-    pub async fn abort(self) -> Result<(), E> {
+    pub async fn abort(self) -> Result<(), DE> {
         self.state.revert().await
     }
 }

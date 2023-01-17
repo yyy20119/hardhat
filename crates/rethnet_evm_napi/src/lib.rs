@@ -339,7 +339,7 @@ pub struct TracingMessageResult {
 
 #[napi]
 pub struct Rethnet {
-    runtime: rethnet_evm::Rethnet<anyhow::Error>,
+    runtime: rethnet_evm::Rethnet<napi::Error>,
 }
 
 #[napi]

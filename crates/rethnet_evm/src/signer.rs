@@ -1,10 +1,17 @@
-use anyhow::anyhow;
 use hashbrown::HashMap;
 use rethnet_eth::{
     transaction::{SignedTransaction, TransactionRequest},
     Address,
 };
 use secp256k1::{Secp256k1, SecretKey, VerifyOnly};
+
+/// Error type for signing
+#[derive(Debug, thiserror::Error)]
+pub enum SignError {
+    /// Invalid address for signer
+    #[error("Signer for address `{0}` does not exist.")]
+    InvalidSigner(Address),
+}
 
 pub struct Signer {
     accounts: HashMap<Address, SecretKey>,
@@ -19,14 +26,10 @@ impl Signer {
         }
     }
 
-    pub fn sign(
-        &self,
-        request: TransactionRequest,
-        caller: &Address,
-    ) -> anyhow::Result<SignedTransaction> {
+    pub fn sign(&self, request: TransactionRequest, caller: &Address) -> Result<SignedTransaction> {
         let signer = self
             .accounts
             .get(caller)
-            .ok_or_else(|| anyhow!("Signer for address `{}` does not exist.", caller))?;
+            .ok_or_else(|| SignError::InvalidSigner(*caller))?;
     }
 }

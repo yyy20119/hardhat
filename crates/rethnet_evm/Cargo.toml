@@ -4,7 +4,6 @@ version = "0.1.0-dev"
 edition = "2021"
 
 [dependencies]
-anyhow = { version = "1.0.64", default-features = false, features = ["std"] }
 auto_impl = { version = "1.0.1", default-features = false }
 ethers-signers = { version = "1.0.0", default-features = false }
 hashbrown = { version = "0.13", default-features = false, features = ["ahash", "serde"] }

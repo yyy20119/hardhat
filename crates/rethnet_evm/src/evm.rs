@@ -6,15 +6,16 @@ use crate::{blockchain::AsyncBlockchain, db::AsyncDatabase};
 
 /// Creates an evm from the provided database, config, transaction, and block.
 #[allow(clippy::type_complexity)]
-pub fn build_evm<'b, 'd, E>(
-    blockchain: &'b AsyncBlockchain<E>,
-    db: &'d AsyncDatabase<E>,
+pub fn build_evm<'b, 'd, BE, DE>(
+    blockchain: &'b AsyncBlockchain<BE>,
+    db: &'d AsyncDatabase<DE>,
     cfg: CfgEnv,
     transaction: TxEnv,
     block: BlockEnv,
-) -> revm::EVM<&'d AsyncDatabase<E>, &'b AsyncBlockchain<E>>
+) -> revm::EVM<&'d AsyncDatabase<DE>, &'b AsyncBlockchain<BE>>
 where
-    E: Debug + Send + 'static,
+    BE: Debug + Send + 'static,
+    DE: Debug + Send + 'static,
 {
     let mut evm = revm::EVM::new();
     evm.set_blockchain(blockchain);

@@ -8,23 +8,25 @@ use crate::{
 };
 
 /// The asynchronous Rethnet runtime.
-pub struct Rethnet<E>
+pub struct Rethnet<BE, DE>
 where
-    E: Debug + Send + 'static,
+    BE: Debug + Send + 'static,
+    DE: Debug + Send + 'static,
 {
-    blockchain: Arc<AsyncBlockchain<E>>,
-    db: Arc<AsyncDatabase<E>>,
+    blockchain: Arc<AsyncBlockchain<BE>>,
+    db: Arc<AsyncDatabase<DE>>,
     cfg: CfgEnv,
 }
 
-impl<E> Rethnet<E>
+impl<BE, DE> Rethnet<BE, DE>
 where
-    E: Debug + Send + 'static,
+    BE: Debug + Send + 'static,
+    DE: Debug + Send + 'static,
 {
     /// Constructs a new [`Rethnet`] instance.
     pub fn new(
-        blockchain: Arc<AsyncBlockchain<E>>,
-        db: Arc<AsyncDatabase<E>>,
+        blockchain: Arc<AsyncBlockchain<BE>>,
+        db: Arc<AsyncDatabase<DE>>,
         cfg: CfgEnv,
     ) -> Self {
         Self {

@@ -7,6 +7,7 @@ use napi::{
 };
 use napi_derive::napi;
 use rethnet_eth::{Address, U256};
+use rethnet_evm::db::DatabaseError;
 
 use crate::{
     blockchain::Blockchain, cast::TryCast, state::StateManager, transaction::Transaction, Config,
@@ -17,7 +18,7 @@ use super::{BlockConfig, BlockHeader};
 
 #[napi]
 pub struct BlockBuilder {
-    builder: Arc<Mutex<Option<rethnet_evm::BlockBuilder<anyhow::Error>>>>,
+    builder: Arc<Mutex<Option<rethnet_evm::BlockBuilder<napi::Error, DatabaseError>>>>,
 }
 
 #[napi]
@@ -41,8 +42,7 @@ impl BlockBuilder {
             parent,
             block,
         )
-        .await
-        .map_err(|e| napi::Error::new(Status::GenericFailure, e.to_string()))?;
+        .await;
 
         Ok(Self {
             builder: Arc::new(Mutex::new(Some(builder))),
