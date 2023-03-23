@@ -529,6 +529,10 @@ export class DualModeAdapter implements VMAdapter {
     this._ethereumJSVMTracer.clearLastError();
     this._rethnetVMTracer.clearLastError();
   }
+
+  public async printState() {
+    throw new Error("not implemented");
+  }
 }
 
 function assertEqualRunTxResults(
