@@ -15,12 +15,7 @@ import {
 import { existsSync, writeFileSync } from "fs";
 import path from "path";
 import chalk from "chalk";
-import {
-  getForgeConfig,
-  getRemappings,
-  HardhatFoundryError,
-  installDependency,
-} from "./foundry";
+import { FoundryRunner, HardhatFoundryError } from "./foundry";
 
 const TASK_INIT_FOUNDRY = "init-foundry";
 
@@ -40,7 +35,8 @@ extendConfig((config, userConfig) => {
   }
 
   // Load foundry config
-  const foundryConfig = getForgeConfig();
+  const foundryRunner = FoundryRunner.create();
+  const foundryConfig = foundryRunner.getForgeConfig();
 
   // Ensure required keys exist
   if (
@@ -91,7 +87,8 @@ internalTask(TASK_COMPILE_TRANSFORM_IMPORT_NAME).setAction(
       return runSuper({ importName });
     }
 
-    const remappings = await getRemappings();
+    const foundryRunner = FoundryRunner.create();
+    const remappings = await foundryRunner.getRemappings();
 
     for (const [from, to] of Object.entries(remappings)) {
       if (importName.startsWith(from) && !importName.startsWith(".")) {
@@ -114,7 +111,7 @@ internalTask(TASK_COMPILE_SOLIDITY_GET_COMPILATION_JOB_FOR_FILE).setAction(
       file: ResolvedFile;
       solidityFilesCache?: SolidityFilesCache;
     },
-    hre,
+    _hre,
     runSuper
   ): Promise<CompilationJob | CompilationJobCreationError> => {
     const job = (await runSuper({ dependencyGraph, file })) as
@@ -125,7 +122,8 @@ internalTask(TASK_COMPILE_SOLIDITY_GET_COMPILATION_JOB_FOR_FILE).setAction(
       return job;
     }
 
-    const remappings = await getRemappings();
+    const foundryRunner = FoundryRunner.create();
+    const remappings = await foundryRunner.getRemappings();
     job.getSolcConfig().settings.remappings = Object.entries(remappings).map(
       ([from, to]) => `${from}=${to}`
     );
@@ -168,7 +166,8 @@ task(
       ].join("\n")
     );
 
-    await installDependency("foundry-rs/forge-std");
+    const foundryRunner = FoundryRunner.create();
+    await foundryRunner.installDependency("foundry-rs/forge-std");
   }
 );
 

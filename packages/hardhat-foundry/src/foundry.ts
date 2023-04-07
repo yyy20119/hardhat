@@ -1,13 +1,12 @@
 import chalk from "chalk";
 import { exec as execCallback, execSync } from "child_process";
 import { NomicLabsHardhatPluginError } from "hardhat/internal/core/errors";
+import os from "os";
 import { promisify } from "util";
 
 const exec = promisify(execCallback);
 
 type Remappings = Record<string, string>;
-
-let cachedRemappings: Remappings | undefined;
 
 export class HardhatFoundryError extends NomicLabsHardhatPluginError {
   constructor(message: string, parent?: Error) {
@@ -27,49 +26,115 @@ ${parent.message}
   }
 }
 
-export function getForgeConfig() {
-  return JSON.parse(runCmdSync("forge config --json"));
+function runningOnWindows() {
+  return os.platform() === "win32";
 }
 
-export async function getRemappings() {
-  // Return remappings if they were already loaded
-  if (cachedRemappings !== undefined) {
-    return cachedRemappings;
-  }
+export class FoundryRunner {
+  private static _instance: FoundryRunner | undefined;
+  private _cachedRemappings: Remappings | undefined;
 
-  // Get remappings from foundry
-  const remappingsTxt = await runCmd("forge remappings");
+  private constructor(private _forgeCommand: string) {}
 
-  const remappings: Remappings = {};
-  const remappingLines = remappingsTxt.split(/\r\n|\r|\n/);
-  for (const remappingLine of remappingLines) {
-    const fromTo = remappingLine.split("=");
-    if (fromTo.length !== 2) {
-      continue;
+  public static create() {
+    if (FoundryRunner._instance !== undefined) {
+      return FoundryRunner._instance;
     }
 
-    const [from, to] = fromTo;
+    const potentialForgeCommands = ["forge"];
 
-    // source names with "node_modules" in it have special treatment in hardhat core, so we skip them
-    if (to.includes("node_modules")) {
-      continue;
+    if (runningOnWindows()) {
+      potentialForgeCommands.push("%USERPROFILE%\\.cargo\\bin\\forge");
+    } else {
+      potentialForgeCommands.push("~/.foundry/bin/forge");
     }
 
-    remappings[from] = to;
+    console.log(
+      "[Issue 449] Potential forge commands:",
+      potentialForgeCommands
+    );
+
+    for (const potentialForgeCommand of potentialForgeCommands) {
+      try {
+        execSync(`${potentialForgeCommand} --version`, {
+          stdio: "pipe",
+        }).toString();
+        FoundryRunner._instance = new FoundryRunner(potentialForgeCommand);
+        console.log(`[Issue 449] '${potentialForgeCommand}' worked`);
+        return FoundryRunner._instance;
+      } catch (error: any) {
+        console.log(
+          `[Issue 449] '${potentialForgeCommand}' didn't work:`,
+          error.message,
+          `(code: ${error.status}})`
+        );
+        if (
+          error.status === 127 || // unix
+          error.toString().includes("is not recognized") === true || // windows (code: 1)
+          error.toString().includes("cannot find the path") === true // windows (code: 1)
+        ) {
+          // command not found, then try the next potential command
+          continue;
+        } else {
+          // command found but execution failed
+          throw error;
+        }
+      }
+    }
+
+    console.log("[Issue 449] No command worked");
+
+    throw new HardhatFoundryError(
+      `Couldn't find forge binary. Performed lookup: ${JSON.stringify(
+        potentialForgeCommands
+      )}`
+    );
   }
 
-  cachedRemappings = remappings;
-  return remappings;
-}
+  public getForgeConfig() {
+    return JSON.parse(runCmdSync(`${this._forgeCommand} config --json`));
+  }
 
-export async function installDependency(dependency: string) {
-  const cmd = `forge install --no-commit ${dependency}`;
-  console.log(`Running '${chalk.blue(cmd)}'`);
+  public async getRemappings() {
+    // Return remappings if they were already loaded
+    if (this._cachedRemappings !== undefined) {
+      return this._cachedRemappings;
+    }
 
-  try {
-    await exec(cmd);
-  } catch (error: any) {
-    throw new ForgeInstallError(dependency, error);
+    // Get remappings from foundry
+    const remappingsTxt = await runCmd(`${this._forgeCommand} remappings`);
+
+    const remappings: Remappings = {};
+    const remappingLines = remappingsTxt.split(/\r\n|\r|\n/);
+    for (const remappingLine of remappingLines) {
+      const fromTo = remappingLine.split("=");
+      if (fromTo.length !== 2) {
+        continue;
+      }
+
+      const [from, to] = fromTo;
+
+      // source names with "node_modules" in it have special treatment in hardhat core, so we skip them
+      if (to.includes("node_modules")) {
+        continue;
+      }
+
+      remappings[from] = to;
+    }
+
+    this._cachedRemappings = remappings;
+    return remappings;
+  }
+
+  public async installDependency(dependency: string) {
+    const cmd = `${this._forgeCommand} install --no-commit ${dependency}`;
+    console.log(`Running '${chalk.blue(cmd)}'`);
+
+    try {
+      await exec(cmd);
+    } catch (error: any) {
+      throw new ForgeInstallError(dependency, error);
+    }
   }
 }
 
