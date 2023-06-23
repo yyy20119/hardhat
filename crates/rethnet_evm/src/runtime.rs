@@ -67,7 +67,13 @@ where
         let state = self.state.read().await;
         let blockchain = self.blockchain.read().await;
 
-        let evm = build_evm(&*blockchain, &*state, self.cfg.clone(), transaction, block);
+        let evm = build_evm(
+            blockchain.as_ref(),
+            state.as_ref(),
+            self.cfg.clone(),
+            transaction,
+            block,
+        );
 
         run_transaction(evm, inspector).map_err(TransactionError::from)
     }
@@ -90,7 +96,7 @@ where
         let state = self.state.read().await;
         let blockchain = self.blockchain.read().await;
 
-        let evm = build_evm(&*blockchain, &*state, cfg, transaction, block);
+        let evm = build_evm(blockchain.as_ref(), state.as_ref(), cfg, transaction, block);
 
         run_transaction(evm, inspector).map_err(TransactionError::from)
     }
@@ -110,7 +116,13 @@ where
         let mut state = self.state.write().await;
         let blockchain = self.blockchain.read().await;
 
-        let evm = build_evm(&*blockchain, &*state, self.cfg.clone(), transaction, block);
+        let evm = build_evm(
+            blockchain.as_ref(),
+            state.as_ref(),
+            self.cfg.clone(),
+            transaction,
+            block,
+        );
 
         let ResultAndState {
             result,

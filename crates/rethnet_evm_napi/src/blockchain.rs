@@ -1,29 +1,42 @@
-mod js_blockchain;
+use std::{fmt::Debug, ops::Deref, sync::Arc};
 
-use std::{fmt::Debug, sync::Arc};
-
-use napi::{bindgen_prelude::Buffer, tokio::sync::RwLock, Env, JsFunction, NapiRaw};
+use napi::{bindgen_prelude::ObjectFinalize, tokio::sync::RwLock, Env, Status};
 use napi_derive::napi;
-use rethnet_eth::B256;
-use rethnet_evm::blockchain::SyncBlockchain;
 
-use crate::{
-    sync::{await_promise, handle_error},
-    threadsafe_function::{ThreadSafeCallContext, ThreadsafeFunction},
-};
+use rethnet_evm::blockchain::{BlockchainError, SyncBlockchain};
 
-use self::js_blockchain::{GetBlockHashCall, JsBlockchain};
+use crate::block::Block;
+
+// An arbitrarily large amount of memory to signal to the javascript garbage collector that it needs to
+// attempt to free the blockchain object's memory.
+const BLOCKCHAIN_MEMORY_SIZE: i64 = 10_000;
 
 /// The Rethnet blockchain
-#[napi]
+#[napi(custom_finalize)]
 #[derive(Debug)]
 pub struct Blockchain {
-    inner: Arc<RwLock<Box<dyn SyncBlockchain<napi::Error>>>>,
+    inner: Arc<RwLock<Box<dyn SyncBlockchain<BlockchainError>>>>,
 }
 
 impl Blockchain {
-    /// Provides immutable access to the inner implementation.
-    pub fn as_inner(&self) -> &Arc<RwLock<Box<dyn SyncBlockchain<napi::Error>>>> {
+    fn with_blockchain<B>(env: &mut Env, blockchain: B) -> napi::Result<Self>
+    where
+        B: SyncBlockchain<BlockchainError>,
+    {
+        let blockchain: Box<dyn SyncBlockchain<BlockchainError>> = Box::new(blockchain);
+
+        env.adjust_external_memory(BLOCKCHAIN_MEMORY_SIZE)?;
+
+        Ok(Self {
+            inner: Arc::new(RwLock::new(blockchain)),
+        })
+    }
+}
+
+impl Deref for Blockchain {
+    type Target = Arc<RwLock<Box<dyn SyncBlockchain<BlockchainError>>>>;
+
+    fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
@@ -33,42 +46,11 @@ impl Blockchain {
     /// Constructs a new blockchain that queries the blockhash using a callback.
     #[napi(constructor)]
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    pub fn new(
-        env: Env,
-        #[napi(ts_arg_type = "(blockNumber: bigint) => Promise<Buffer>")]
-        get_block_hash_fn: JsFunction,
-    ) -> napi::Result<Self> {
-        let get_block_hash_fn = ThreadsafeFunction::create(
-            env.raw(),
-            unsafe { get_block_hash_fn.raw() },
-            0,
-            |ctx: ThreadSafeCallContext<GetBlockHashCall>| {
-                let sender = ctx.value.sender.clone();
+    pub fn new(mut env: Env, genesis_block: &Block) -> napi::Result<Self> {
+        let blockchain = rethnet_evm::blockchain::InMemoryBlockchain::new((*genesis_block).clone())
+            .map_err(|e| napi::Error::new(Status::InvalidArg, e.to_string()))?;
 
-                let block_number = ctx
-                    .env
-                    .create_bigint_from_words(false, ctx.value.block_number.as_limbs().to_vec())?;
-
-                let promise = ctx.callback.call(None, &[block_number.into_unknown()?])?;
-                let result = await_promise::<Buffer, B256>(ctx.env, promise, ctx.value.sender);
-
-                handle_error(sender, result)
-            },
-        )?;
-
-        Ok(Self::with_blockchain(JsBlockchain { get_block_hash_fn }))
-    }
-
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    fn with_blockchain<B>(blockchain: B) -> Self
-    where
-        B: SyncBlockchain<napi::Error>,
-    {
-        let blockchain: Box<dyn SyncBlockchain<napi::Error>> = Box::new(blockchain);
-
-        Self {
-            inner: Arc::new(RwLock::new(blockchain)),
-        }
+        Self::with_blockchain(&mut env, blockchain)
     }
 
     // #[napi]
@@ -85,4 +67,13 @@ impl Blockchain {
     //         .await
     //         .map_err(|e| napi::Error::new(Status::GenericFailure, e.to_string()))
     // }
+}
+
+impl ObjectFinalize for Blockchain {
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
+    fn finalize(self, mut env: Env) -> napi::Result<()> {
+        env.adjust_external_memory(-BLOCKCHAIN_MEMORY_SIZE)?;
+
+        Ok(())
+    }
 }

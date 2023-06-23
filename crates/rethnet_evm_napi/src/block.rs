@@ -1,6 +1,6 @@
 mod builder;
 
-use std::mem;
+use std::{mem, ops::Deref};
 
 use napi::{
     bindgen_prelude::{BigInt, Buffer, Either3},
@@ -277,6 +277,14 @@ impl Block {
     /// Constructs a [`Block`] instance.
     pub fn new(block: rethnet_eth::block::Block, callers: Vec<rethnet_eth::Address>) -> Self {
         Self { block, callers }
+    }
+}
+
+impl Deref for Block {
+    type Target = rethnet_eth::block::Block;
+
+    fn deref(&self) -> &Self::Target {
+        &self.block
     }
 }
 

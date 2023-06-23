@@ -19,7 +19,7 @@ use revm::{
         ResultAndState, SpecId,
     },
 };
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, RwLockReadGuard};
 
 use crate::{
     blockchain::SyncBlockchain,
@@ -31,10 +31,18 @@ use crate::{
 use super::difficulty::calculate_ethash_canonical_difficulty;
 
 /// Combined block and the callers of the transactions in the block
-pub struct BlockAndCallers(pub Block, pub Vec<Address>);
+pub struct BlockResult {
+    /// Built block
+    pub block: Block,
+    /// Transaction receipts
+    pub receipts: Vec<TypedReceipt>,
+    /// Transaction callers
+    pub callers: Vec<Address>,
+}
 
+/// An error caused during construction of a block builder.
 #[derive(Debug, thiserror::Error)]
-pub enum BlockBuilderError<SE> {
+pub enum BlockBuilderCreationError<SE> {
     /// Unsupported hardfork. Hardforks older than Byzantium are not supported
     #[error("Unsupported hardfork: {0:?}. Hardforks older than Byzantium are not supported.")]
     UnsupportedHardfork(SpecId),
@@ -43,7 +51,7 @@ pub enum BlockBuilderError<SE> {
     State(#[from] SE),
 }
 
-/// Invalid transaction error while creating block.
+/// An error caused during execution of a transaction while building a block.
 #[derive(Debug, thiserror::Error)]
 pub enum BlockTransactionError<BE, SE> {
     /// Blockchain errors
@@ -103,9 +111,9 @@ where
         cfg: CfgEnv,
         parent: Header,
         options: BlockOptions,
-    ) -> Result<Self, BlockBuilderError<SE>> {
+    ) -> Result<Self, BlockBuilderCreationError<SE>> {
         if cfg.spec_id < SpecId::BYZANTIUM {
-            return Err(BlockBuilderError::UnsupportedHardfork(cfg.spec_id));
+            return Err(BlockBuilderCreationError::UnsupportedHardfork(cfg.spec_id));
         }
 
         state.write().await.checkpoint()?;
@@ -173,6 +181,11 @@ where
         })
     }
 
+    /// Retrieves the config of the block builder.
+    pub fn config(&self) -> &CfgEnv {
+        &self.cfg
+    }
+
     /// Retrieves the amount of gas used in the block, so far.
     pub fn gas_used(&self) -> U256 {
         self.header.gas_used
@@ -181,6 +194,11 @@ where
     /// Retrieves the amount of gas left in the block.
     pub fn gas_remaining(&self) -> U256 {
         self.header.gas_limit - self.gas_used()
+    }
+
+    /// Retrievs the instance's state.
+    pub async fn state(&self) -> RwLockReadGuard<Box<dyn SyncState<SE>>> {
+        self.state.read().await
     }
 
     // fn miner_reward(num_ommers: u64) -> U256 {
@@ -198,7 +216,7 @@ where
         inspector: Option<&mut dyn SyncInspector<BE, SE>>,
     ) -> Result<ExecutionResult, BlockTransactionError<BE, SE>> {
         //  transaction's gas limit cannot be greater than the remaining gas in the block
-        if U256::from(transaction.transaction.gas_limit()) > self.gas_remaining() {
+        if U256::from(transaction.gas_limit()) > self.gas_remaining() {
             return Err(BlockTransactionError::ExceedsBlockGasLimit);
         }
 
@@ -220,8 +238,8 @@ where
         let blockchain = self.blockchain.read().await;
 
         let evm = build_evm(
-            &*blockchain,
-            &*state,
+            blockchain.as_ref(),
+            state.as_ref(),
             self.cfg.clone(),
             transaction.clone().into(),
             block.clone(),
@@ -252,7 +270,7 @@ where
             logs,
         };
 
-        self.receipts.push(match &transaction.transaction {
+        self.receipts.push(match &*transaction {
             SignedTransaction::Legacy(_) => TypedReceipt::Legacy(receipt),
             SignedTransaction::EIP2930(_) => TypedReceipt::EIP2930(receipt),
             SignedTransaction::EIP1559(_) => TypedReceipt::EIP1559(receipt),
@@ -271,7 +289,7 @@ where
         mut self,
         rewards: Vec<(Address, U256)>,
         timestamp: Option<U256>,
-    ) -> Result<BlockAndCallers, SE> {
+    ) -> Result<BlockResult, SE> {
         let mut state = self.state.write().await;
         for (address, reward) in rewards {
             state
@@ -330,7 +348,11 @@ where
         // TODO: handle ommers
         let block = Block::new(self.header, self.transactions, vec![]);
 
-        Ok(BlockAndCallers(block, self.callers))
+        Ok(BlockResult {
+            block,
+            receipts: self.receipts,
+            callers: self.callers,
+        })
     }
 
     /// Aborts building of the block, reverting all transactions in the process.
