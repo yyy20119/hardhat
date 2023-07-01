@@ -42,9 +42,10 @@ pub enum RpcClientError {
 }
 
 /// a JSON-RPC method invocation request
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct Request<MethodInvocation> {
     /// JSON-RPC version
+    #[serde(rename = "jsonrpc")]
     pub version: jsonrpc::Version,
     /// the method to invoke, with its parameters
     #[serde(flatten)]
@@ -210,7 +211,7 @@ impl RpcClient {
         block: BlockSpec,
     ) -> Result<AccountInfo, RpcClientError> {
         let inputs = Vec::from([
-            MethodInvocation::GetBalance(*address, block.clone()),
+            MethodInvocation::GetBalance(*address, Some(block.clone())),
             MethodInvocation::GetTransactionCount(*address, block.clone()),
             MethodInvocation::GetCode(*address, block),
         ]);

@@ -82,6 +82,7 @@ export class HttpProvider extends EventEmitter implements EIP1193Provider {
       args.method,
       args.params as any[]
     );
+    console.log(`REQUEST: ${JSON.stringify(jsonRpcRequest)}`);
     const jsonRpcResponse = await this._fetchJsonRpcResponse(jsonRpcRequest);
 
     if (isErrorResponse(jsonRpcResponse)) {

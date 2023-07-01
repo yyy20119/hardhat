@@ -2,7 +2,9 @@ pub fn help_test_method_invocation_serde<MethodInvocation>(call: MethodInvocatio
 where
     MethodInvocation: PartialEq + std::fmt::Debug + serde::de::DeserializeOwned + serde::Serialize,
 {
+    dbg!(&call);
     let json = serde_json::json!(call).to_string();
+    dbg!(&json);
 
     // validate that variations of MethodInvocation which have single values can still be
     // deserialized when presented with `params` as a vector rather than a single value:

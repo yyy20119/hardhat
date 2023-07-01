@@ -30,6 +30,8 @@ pub struct FilterOptions {
     topics: Option<Vec<ZeroXPrefixedBytes>>,
 }
 
+fn latest() -> Option<BlockSpec> { Some(BlockSpec::latest()) }
+
 /// for an invoking a method on a remote ethereum node
 #[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "method", content = "params")]
@@ -67,7 +69,11 @@ pub enum MethodInvocation {
     GasPrice(),
     /// eth_getBalance
     #[serde(rename = "eth_getBalance")]
-    GetBalance(Address, BlockSpec),
+    GetBalance(
+        Address,
+        #[serde(skip_serializing_if = "Option::is_none", default = "latest")]
+        Option<BlockSpec>,
+    ),
     /// eth_getBlockByNumber
     #[serde(rename = "eth_getBlockByNumber")]
     GetBlockByNumber(
@@ -326,7 +332,7 @@ mod tests {
     fn test_serde_eth_get_balance_by_block_number() {
         help_test_method_invocation_serde(MethodInvocation::GetBalance(
             Address::from_low_u64_ne(1),
-            BlockSpec::Number(U256::from(100)),
+            Some(BlockSpec::Number(U256::from(100))),
         ));
     }
 
@@ -334,7 +340,15 @@ mod tests {
     fn test_serde_eth_get_balance_by_block_tag() {
         help_test_method_invocation_serde(MethodInvocation::GetBalance(
             Address::from_low_u64_ne(1),
-            BlockSpec::latest(),
+            Some(BlockSpec::latest()),
+        ));
+    }
+
+    #[test]
+    fn test_serde_eth_get_balance_without_block_spec() {
+        help_test_method_invocation_serde(MethodInvocation::GetBalance(
+            Address::from_low_u64_ne(1),
+            None,
         ));
     }
 

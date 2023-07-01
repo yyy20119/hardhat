@@ -31,7 +31,7 @@ async fn node() -> Result<(), Box<dyn std::error::Error>> {
     let method_invocations = [
         MethodInvocation::Eth(EthMethodInvocation::GetBalance(
             address,
-            BlockSpec::latest(),
+            Some(BlockSpec::latest()),
         )),
         MethodInvocation::Eth(EthMethodInvocation::GetCode(address, BlockSpec::latest())),
         MethodInvocation::Eth(EthMethodInvocation::GetStorageAt(
@@ -74,6 +74,7 @@ async fn node() -> Result<(), Box<dyn std::error::Error>> {
         .arg("node")
         .arg("--port")
         .arg("8549")
+        .arg("-vv")
         .stdout(Stdio::piped())
         .spawn()?;
 

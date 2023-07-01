@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 
 use hashbrown::HashMap;
 use rethnet_eth::remote::ZeroXPrefixedBytes;
+use tracing::Level;
 
 use rethnet_eth::{
     remote::{
@@ -44,6 +45,10 @@ async fn start_server() -> SocketAddr {
 }
 
 async fn submit_request(address: &SocketAddr, request: &RpcRequest<MethodInvocation>) -> String {
+    tracing_subscriber::fmt::Subscriber::builder()
+        .with_max_level(Level::INFO)
+        .try_init()
+        .ok();
     let url = format!("http://{address}/");
     let body = serde_json::to_string(&request).expect("should serialize request to JSON");
     reqwest::Client::new()
@@ -65,7 +70,7 @@ async fn test_get_balance_nonexistent_account() {
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetBalance(
             Address::from_low_u64_ne(2),
-            BlockSpec::latest(),
+            Some(BlockSpec::latest()),
         )),
     };
 
@@ -95,7 +100,7 @@ async fn test_get_balance_success() {
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetBalance(
             Address::from_low_u64_ne(1),
-            BlockSpec::latest(),
+            Some(BlockSpec::latest()),
         )),
     };
 
@@ -250,7 +255,7 @@ async fn test_set_balance_success() {
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetBalance(
             address,
-            BlockSpec::latest(),
+            Some(BlockSpec::latest()),
         )),
     };
 

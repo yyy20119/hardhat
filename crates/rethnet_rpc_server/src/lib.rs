@@ -32,6 +32,18 @@ pub use hardhat_methods::{
     HardhatMethodInvocation,
 };
 
+#[derive(Clone, Copy)]
+struct U256WithoutLeadingZeroes(U256);
+
+impl serde::Serialize for U256WithoutLeadingZeroes {
+    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        rethnet_eth::remote::serialize_u256(&self.0, s)
+    }
+}
+
 /// an RPC method with its parameters
 #[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(untagged)]
@@ -48,6 +60,7 @@ type RethnetStateType = Arc<RwLock<Box<dyn SyncState<StateError>>>>;
 struct AppState {
     rethnet_state: RethnetStateType,
     fork_block_number: Option<U256>,
+    accounts: Vec<Address>,
 }
 
 type StateType = Arc<AppState>;
@@ -98,19 +111,20 @@ fn check_post_merge_block_tags<T>(_state: &StateType) -> Result<(), ResponseData
 /// restore the context to that state root.
 async fn set_block_context<T>(
     state: &StateType,
-    block_spec: BlockSpec,
+    block_spec: Option<BlockSpec>,
 ) -> Result<B256, ResponseData<T>> {
     let previous_state_root = state.rethnet_state.read().await.state_root().map_err(|e| {
         error_response_data(&format!("Failed to retrieve previous state root: {e}"))
     })?;
     match block_spec {
-        BlockSpec::Tag(BlockTag::Pending) => {
+        Some(BlockSpec::Tag(BlockTag::Pending)) => {
             // do nothing
             Ok(previous_state_root)
         }
-        BlockSpec::Tag(BlockTag::Latest) if state.fork_block_number.is_none() => {
+        Some(BlockSpec::Tag(BlockTag::Latest)) if state.fork_block_number.is_none() => {
             Ok(previous_state_root)
         }
+        None => Ok(previous_state_root),
         resolvable_block_spec => {
             state
                 .rethnet_state
@@ -119,15 +133,15 @@ async fn set_block_context<T>(
                 .set_block_context(
                     &KECCAK_EMPTY,
                     Some(match resolvable_block_spec.clone() {
-                        BlockSpec::Number(n) => Ok(n),
-                        BlockSpec::Eip1898(s) => match s {
+                        Some(BlockSpec::Number(n)) => Ok(n),
+                        Some(BlockSpec::Eip1898(s)) => match s {
                             Eip1898BlockSpec::Number { block_number: n } => Ok(n),
                             Eip1898BlockSpec::Hash {
                                 block_hash: _,
                                 require_canonical: _,
                             } => todo!("when there's a blockchain present"),
                         },
-                        BlockSpec::Tag(tag) => match tag {
+                        Some(BlockSpec::Tag(tag)) => match tag {
                             BlockTag::Earliest => Ok(U256::ZERO),
                             BlockTag::Safe | BlockTag::Finalized => {
                                 check_post_merge_block_tags(state)?;
@@ -136,6 +150,7 @@ async fn set_block_context<T>(
                             BlockTag::Latest => Ok(get_latest_block_number(state).await?),
                             BlockTag::Pending => panic!("should never happen"),
                         },
+                        None => panic!("should never happen"),
                     }?),
                 )
                 .map_err(|e| {
@@ -166,25 +181,37 @@ async fn get_account_info<T>(
 ) -> Result<AccountInfo, ResponseData<T>> {
     match state.rethnet_state.read().await.basic(address) {
         Ok(Some(account_info)) => Ok(account_info),
-        Ok(None) => Err(error_response_data("No such account")),
+        Ok(None) => Ok(AccountInfo {
+            balance: U256::ZERO,
+            nonce: 0,
+            code: None,
+            code_hash: KECCAK_EMPTY,
+        }),
         Err(e) => Err(error_response_data(&e.to_string())),
     }
+}
+
+async fn handle_accounts(state: StateType) -> ResponseData<Vec<Address>> {
+    ResponseData::Success { result: state.accounts.clone() }
 }
 
 async fn handle_get_balance(
     state: StateType,
     address: Address,
-    block: BlockSpec,
-) -> ResponseData<U256> {
+    block: Option<BlockSpec>,
+) -> ResponseData<U256WithoutLeadingZeroes> {
     event!(Level::INFO, "eth_getBalance({address:?}, {block:?})");
-    match set_block_context(&state, block).await {
+    match set_block_context(&state, block.clone()).await {
         Ok(previous_state_root) => {
             let account_info = get_account_info(&state, address).await;
             match restore_block_context(&state, previous_state_root).await {
                 Ok(()) => match account_info {
-                    Ok(account_info) => ResponseData::Success {
-                        result: account_info.balance,
-                    },
+                    Ok(account_info) => {
+                        event!(Level::INFO, "eth_getBalance({address:?}, {block:?}): {:?}", account_info.balance);
+                        ResponseData::Success {
+                            result: U256WithoutLeadingZeroes(account_info.balance),
+                        }
+                    }
                     Err(e) => e,
                 },
                 Err(e) => e,
@@ -200,7 +227,7 @@ async fn handle_get_code(
     block: BlockSpec,
 ) -> ResponseData<ZeroXPrefixedBytes> {
     event!(Level::INFO, "eth_getCode({address:?}, {block:?})");
-    match set_block_context(&state, block).await {
+    match set_block_context(&state, Some(block)).await {
         Ok(previous_state_root) => {
             let account_info = get_account_info(&state, address).await;
             match restore_block_context(&state, previous_state_root).await {
@@ -239,7 +266,7 @@ async fn handle_get_storage_at(
         Level::INFO,
         "eth_getStorageAt({address:?}, {position:?}, {block:?})"
     );
-    match set_block_context(&state, block).await {
+    match set_block_context(&state, Some(block)).await {
         Ok(previous_state_root) => {
             let value = state.rethnet_state.read().await.storage(address, position);
             match restore_block_context(&state, previous_state_root).await {
@@ -265,7 +292,7 @@ async fn handle_get_transaction_count(
         Level::INFO,
         "eth_getTransactionCount({address:?}, {block:?})"
     );
-    match set_block_context(&state, block).await {
+    match set_block_context(&state, Some(block)).await {
         Ok(previous_state_root) => {
             let account_info = get_account_info(&state, address).await;
             match restore_block_context(&state, previous_state_root).await {
@@ -412,6 +439,9 @@ async fn handle_request(
             method,
         } => {
             match method {
+                MethodInvocation::Eth(EthMethodInvocation::Accounts()) => {
+                    response(id, handle_accounts(state).await)
+                },
                 MethodInvocation::Eth(EthMethodInvocation::GetBalance(address, block)) => {
                     response(id, handle_get_balance(state, *address, block.clone()).await)
                 }
@@ -453,13 +483,7 @@ async fn handle_request(
                 // TODO: after adding all the methods here, eliminate this
                 // catch-all match arm:
                 _ => {
-                    let msg = format!(
-                        "Method '{:?}' not found",
-                        match serde_json::to_value(method) {
-                            Ok(value) => Some(value),
-                            Err(_) => None,
-                        },
-                    );
+                    let msg = format!("Method not found for invocation '{:?}'", method,);
                     response(
                         id,
                         ResponseData::<serde_json::Value>::new_error(-32601, &msg, None),
@@ -470,7 +494,7 @@ async fn handle_request(
     }
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 #[serde(untagged)]
 pub enum Request {
     /// A single JSON-RPC request
@@ -485,6 +509,7 @@ async fn router(state: StateType) -> Router {
             "/",
             axum::routing::post(
                 |State(state): State<StateType>, payload: Json<Request>| async move {
+                    event!(Level::TRACE, "request payload: {payload:?}");
                     let requests: Vec<RpcRequest<MethodInvocation>> = match payload {
                         Json(Request::Single(request)) => vec![request],
                         Json(Request::Batch(requests)) => requests,
@@ -542,6 +567,8 @@ impl Server {
         let listener = TcpListener::bind(config.address).map_err(Error::Listen)?;
         event!(Level::INFO, "Listening on {}", config.address);
 
+        let accounts: Vec<Address> = genesis_accounts.iter().map(|(address, _account_info)| address.clone()).collect();
+
         let rethnet_state: StateType =
             if let Some(config) = config.rpc_hardhat_network_config.forking {
                 let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -571,6 +598,7 @@ impl Server {
                         genesis_accounts,
                     )))),
                     fork_block_number: Some(fork_block_number),
+                    accounts,
                 })
             } else {
                 Arc::new(AppState {
@@ -578,6 +606,7 @@ impl Server {
                         genesis_accounts,
                     )))),
                     fork_block_number: None,
+                    accounts,
                 })
             };
 
