@@ -103,7 +103,7 @@ impl StateManager {
 
         Ok(Self {
             state: Arc::new(RwLock::new(state)),
-            context: context.as_inner().clone(),
+            context: (*context).clone(),
         })
     }
 }
@@ -165,8 +165,8 @@ impl StateManager {
             &mut env,
             context,
             ForkState::new(
-                context.as_inner().runtime().clone(),
-                context.as_inner().hash_generator().clone(),
+                context.runtime().clone(),
+                context.hash_generator().clone(),
                 remote_node_url.into_utf8()?.as_str()?,
                 fork_block_number,
                 accounts,

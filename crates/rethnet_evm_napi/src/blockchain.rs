@@ -44,11 +44,13 @@ impl Deref for Blockchain {
 #[napi]
 impl Blockchain {
     /// Constructs a new blockchain that queries the blockhash using a callback.
-    #[napi(constructor)]
+    #[napi(factory)]
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    pub fn new(mut env: Env, genesis_block: &Block) -> napi::Result<Self> {
-        let blockchain = rethnet_evm::blockchain::InMemoryBlockchain::new((*genesis_block).clone())
-            .map_err(|e| napi::Error::new(Status::InvalidArg, e.to_string()))?;
+    pub fn with_genesis_block(mut env: Env, genesis_block: &Block) -> napi::Result<Self> {
+        let blockchain = rethnet_evm::blockchain::InMemoryBlockchain::with_genesis_block(
+            (*genesis_block).clone(),
+        )
+        .map_err(|e| napi::Error::new(Status::InvalidArg, e.to_string()))?;
 
         Self::with_blockchain(&mut env, blockchain)
     }

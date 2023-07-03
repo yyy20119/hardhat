@@ -19,13 +19,15 @@ use crate::{
 /// The result of mining a block.
 pub struct MineBlockResult {
     /// Mined block
-    block: Block,
+    pub block: Block,
+    /// Transaction callers
+    pub transaction_callers: Vec<Address>,
     /// Transaction results
-    transaction_results: Vec<ExecutionResult>,
+    pub transaction_results: Vec<ExecutionResult>,
     /// Transaction receipts
-    transaction_receipts: Vec<TypedReceipt>,
+    pub transaction_receipts: Vec<TypedReceipt>,
     /// Transaction traces
-    transaction_traces: Vec<Trace>,
+    pub transaction_traces: Vec<Trace>,
 }
 
 /// An error that occurred while mining a block.
@@ -52,6 +54,7 @@ pub enum MineBlockError<BE, SE> {
 }
 
 /// Type for mining blocks.
+#[derive(Clone, Debug)]
 pub struct BlockMiner<BE, SE>
 where
     BE: Debug + Send + 'static,
@@ -59,7 +62,7 @@ where
 {
     blockchain: Arc<RwLock<Box<dyn SyncBlockchain<BE>>>>,
     state: Arc<RwLock<Box<dyn SyncState<SE>>>>,
-    transaction_pool: Arc<RwLock<MemPool>>,
+    mem_pool: Arc<RwLock<MemPool>>,
     prevrandao_generator: RandomHashGenerator,
     cfg: CfgEnv,
     block_gas_limit: U256,
@@ -71,6 +74,27 @@ where
     BE: Debug + Send + 'static,
     SE: Debug + Send + 'static,
 {
+    /// Constructs a new [`BlockMiner`].
+    pub fn new(
+        blockchain: Arc<RwLock<Box<dyn SyncBlockchain<BE>>>>,
+        state: Arc<RwLock<Box<dyn SyncState<SE>>>>,
+        mem_pool: Arc<RwLock<MemPool>>,
+        prevrandao_generator: RandomHashGenerator,
+        cfg: CfgEnv,
+        block_gas_limit: U256,
+        beneficiary: Address,
+    ) -> Self {
+        Self {
+            blockchain,
+            state,
+            mem_pool,
+            prevrandao_generator,
+            cfg,
+            block_gas_limit,
+            beneficiary,
+        }
+    }
+
     /// Mines a block using as many transactions as can fit in it.
     pub async fn mine_block(
         &mut self,
@@ -89,7 +113,7 @@ where
                 parent_block.header.clone(),
                 BlockOptions {
                     beneficiary: Some(self.beneficiary),
-                    number: Some(blockchain.last_block().header.number.clone()),
+                    number: Some(blockchain.last_block().header.number),
                     gas_limit: Some(self.block_gas_limit),
                     timestamp: Some(timestamp),
                     mix_hash: if self.cfg.spec_id >= SpecId::MERGE {
@@ -116,9 +140,12 @@ where
             .await?
         };
 
-        let mut transaction_pool = self.transaction_pool.write().await;
-        let mut pending_transactions: VecDeque<_> =
-            transaction_pool.pending_transactions().cloned().collect();
+        let mut transaction_pool = self.mem_pool.write().await;
+        let mut pending_transactions: VecDeque<_> = transaction_pool
+            .pending_transactions()
+            .iter()
+            .cloned()
+            .collect();
 
         let mut results = Vec::new();
         let mut traces = Vec::new();
@@ -126,7 +153,7 @@ where
         while let Some(transaction) = pending_transactions.pop_front() {
             let mut tracer = TraceCollector::default();
 
-            let transaction_hash = transaction.hash().clone();
+            let transaction_hash = *transaction.hash();
 
             match block_builder
                 .add_transaction(transaction, Some(&mut tracer))
@@ -155,7 +182,7 @@ where
         let BlockResult {
             block,
             receipts,
-            callers: _callers,
+            callers,
         } = block_builder
             .finalize(rewards, None)
             .await
@@ -173,6 +200,7 @@ where
 
         Ok(MineBlockResult {
             block,
+            transaction_callers: callers,
             transaction_results: results,
             transaction_receipts: receipts,
             transaction_traces: traces,

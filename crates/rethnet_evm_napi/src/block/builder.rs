@@ -51,10 +51,10 @@ impl BlockBuilder {
         let blockchain = (*blockchain).clone();
         let state = (*state_manager).clone();
 
-        let runtime = context.as_inner().runtime().clone();
+        let runtime = context.runtime().clone();
 
         let (deferred, promise) = env.create_deferred()?;
-        context.as_inner().runtime().spawn(async move {
+        context.runtime().spawn(async move {
             let result = rethnet_evm::BlockBuilder::new(blockchain, state, config, parent, block)
                 .await
                 .map_or_else(

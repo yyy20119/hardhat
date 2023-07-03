@@ -195,7 +195,7 @@ export function assertEqualBlocks(ethereumJSBlock: Block, rethnetBlock: Block) {
   }
 }
 
-function transactionDifferences(
+export function transactionDifferences(
   ethereumJSTransaction: TypedTransaction,
   rethnetTransaction: TypedTransaction
 ): string[] {

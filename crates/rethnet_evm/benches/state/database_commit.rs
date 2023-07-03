@@ -63,6 +63,8 @@ fn bench_database_commit(c: &mut Criterion) {
             status: Default::default(),
         };
 
+        account.mark_touch();
+
         // TODO: Change flag in `account_state`
         if account_state.storage_cleared {
             account.mark_created();

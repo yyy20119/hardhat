@@ -129,7 +129,7 @@ where
             receipts_root: options.receipts_root.unwrap_or(KECCAK_NULL_RLP),
             logs_bloom: options.logs_bloom.unwrap_or_default(),
             difficulty: if cfg.spec_id < SpecId::MERGE {
-                calculate_ethash_canonical_difficulty(&cfg, &parent, &number, &timestamp)
+                calculate_ethash_canonical_difficulty(cfg.spec_id, &parent, &number, &timestamp)
             } else {
                 options.difficulty.unwrap_or_default()
             },

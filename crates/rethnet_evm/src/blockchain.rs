@@ -7,14 +7,24 @@ use revm::db::BlockHashRef;
 
 pub use in_memory::InMemoryBlockchain;
 
+/// Combinatorial error for the blockchain API.
 #[derive(Debug, thiserror::Error)]
 pub enum BlockchainError {
+    /// Block number exceeds storage capacity (usize::MAX)
     #[error("Block number exceeds storage capacity.")]
     BlockNumberTooLarge,
+    /// Invalid block number
     #[error("Invalid block numnber: ${actual}. Expected: ${expected}.")]
-    InvalidBlockNumber { actual: U256, expected: U256 },
+    InvalidBlockNumber {
+        /// Provided block number
+        actual: U256,
+        /// Expected block number
+        expected: U256,
+    },
+    /// Invalid parent hash
     #[error("Invalid parent hash")]
     InvalidParentHash,
+    /// Block number does not exist in blockchain
     #[error("Unknown block number")]
     UnknownBlockNumber,
 }

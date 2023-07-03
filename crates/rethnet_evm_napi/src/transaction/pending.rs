@@ -7,7 +7,7 @@ use napi::{
 use napi_derive::napi;
 use rethnet_eth::Address;
 
-use crate::{cast::TryCast, config::Config, state::StateManager};
+use crate::{cast::TryCast, config::SpecId, state::StateManager};
 
 use super::signed::{EIP1559SignedTransaction, EIP2930SignedTransaction, LegacySignedTransaction};
 
@@ -31,7 +31,7 @@ impl PendingTransaction {
     pub fn create(
         env: Env,
         state_manager: &StateManager,
-        config: &Config,
+        spec_id: SpecId,
         transaction: Either3<
             LegacySignedTransaction,
             EIP2930SignedTransaction,
@@ -40,7 +40,7 @@ impl PendingTransaction {
         caller: Option<Buffer>,
     ) -> napi::Result<JsObject> {
         let transaction = transaction.try_cast()?;
-        let spec_id = config.spec_id;
+        let spec_id: rethnet_evm::SpecId = spec_id.into();
 
         let state = (*state_manager).clone();
 
@@ -64,6 +64,33 @@ impl PendingTransaction {
         });
 
         Ok(promise)
+    }
+
+    #[napi]
+    pub fn caller(&self) -> Buffer {
+        Buffer::from(self.inner.caller().as_bytes())
+    }
+
+    #[napi]
+    pub fn transaction(
+        &self,
+        env: Env,
+    ) -> napi::Result<
+        // HACK: napi does not convert Rust type aliases to its underlaying types when generating bindings
+        // so manually do that here
+        Either3<LegacySignedTransaction, EIP2930SignedTransaction, EIP1559SignedTransaction>,
+    > {
+        match &*self.inner {
+            rethnet_eth::transaction::SignedTransaction::Legacy(transaction) => {
+                LegacySignedTransaction::new(&env, transaction).map(Either3::A)
+            }
+            rethnet_eth::transaction::SignedTransaction::EIP2930(transaction) => {
+                EIP2930SignedTransaction::new(&env, transaction).map(Either3::B)
+            }
+            rethnet_eth::transaction::SignedTransaction::EIP1559(transaction) => {
+                EIP1559SignedTransaction::new(&env, transaction).map(Either3::C)
+            }
+        }
     }
 }
 
