@@ -1,6 +1,7 @@
 import { TypedTransaction } from "@nomicfoundation/ethereumjs-tx";
-import { MemPoolAdapter } from "../mem-pool";
+import { Address } from "@nomicfoundation/ethereumjs-util";
 import { transactionDifferences } from "../utils/assertions";
+import { MemPoolAdapter } from "../mem-pool";
 
 /* eslint-disable @nomiclabs/hardhat-internal-rules/only-hardhat-error */
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
@@ -10,6 +11,41 @@ export class DualMemPool implements MemPoolAdapter {
     private readonly _ethereumJS: MemPoolAdapter,
     private readonly _rethnet: MemPoolAdapter
   ) {}
+
+  public async getBlockGasLimit(): Promise<bigint> {
+    const ethereumJS = await this._ethereumJS.getBlockGasLimit();
+    const rethnet = await this._rethnet.getBlockGasLimit();
+
+    if (ethereumJS !== rethnet) {
+      console.trace(
+        `Different blockGasLimit: ${ethereumJS} (ethereumjs) !== ${rethnet} (rethnet)`
+      );
+      throw new Error("Different blockGasLimit");
+    }
+
+    return rethnet;
+  }
+
+  public async setBlockGasLimit(blockGasLimit: bigint): Promise<void> {
+    await this._ethereumJS.setBlockGasLimit(blockGasLimit);
+    await this._rethnet.setBlockGasLimit(blockGasLimit);
+  }
+
+  public async getNextPendingNonce(accountAddress: Address): Promise<bigint> {
+    const ethereumJS = await this._ethereumJS.getNextPendingNonce(
+      accountAddress
+    );
+    const rethnet = await this._rethnet.getNextPendingNonce(accountAddress);
+
+    if (ethereumJS !== rethnet) {
+      console.trace(
+        `Different nextPendingNonce: ${ethereumJS} (ethereumjs) !== ${rethnet} (rethnet)`
+      );
+      throw new Error("Different nextPendingNonce");
+    }
+
+    return rethnet;
+  }
 
   public async addTransaction(transaction: TypedTransaction): Promise<void> {
     await this._ethereumJS.addTransaction(transaction);

@@ -12,17 +12,38 @@ import { HardforkName } from "../../../util/hardforks";
 /* eslint-disable @nomiclabs/hardhat-internal-rules/only-hardhat-error */
 
 export class RethnetMemPool implements MemPoolAdapter {
-  private _memPool = new MemPool();
+  private _memPool;
   private _snapshotIdToMemPool = new Map<number, MemPool>();
   private _nextSnapshotId = 0;
 
   constructor(
+    blockGasLimit: bigint,
     private readonly _stateManager: StateManager,
     private readonly _hardfork: HardforkName
-  ) {}
+  ) {
+    this._memPool = new MemPool(blockGasLimit);
+  }
 
   public asInner(): MemPool {
     return this._memPool;
+  }
+
+  public async getBlockGasLimit(): Promise<bigint> {
+    return this._memPool.blockGasLimit();
+  }
+
+  public async setBlockGasLimit(blockGasLimit: bigint): Promise<void> {
+    return this._memPool.setBlockGasLimit(blockGasLimit);
+  }
+
+  public async getNextPendingNonce(accountAddress: Address): Promise<bigint> {
+    const lastNonce =
+      (await this._memPool.lastPendingNonce(accountAddress.buf)) ??
+      (await this._stateManager.getAccountByAddress(accountAddress.buf))
+        ?.nonce ??
+      0n;
+
+    return BigInt(lastNonce) + 1n;
   }
 
   public async addTransaction(transaction: TypedTransaction): Promise<void> {

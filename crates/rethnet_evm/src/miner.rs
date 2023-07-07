@@ -48,9 +48,6 @@ pub enum MineBlockError<BE, SE> {
     /// A blockchain error
     #[error(transparent)]
     Blockchain(BE),
-    /// An error that occurred while updating the transaction pool.
-    #[error(transparent)]
-    TransactionPoolUpdate(SE),
 }
 
 /// Type for mining blocks.
@@ -194,9 +191,7 @@ where
             .insert_block(block.clone())
             .map_err(MineBlockError::Blockchain)?;
 
-        transaction_pool
-            .update(&*self.state.read().await)
-            .map_err(MineBlockError::TransactionPoolUpdate)?;
+        transaction_pool.update(&*self.state.read().await);
 
         Ok(MineBlockResult {
             block,

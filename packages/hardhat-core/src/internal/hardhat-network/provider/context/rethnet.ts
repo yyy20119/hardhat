@@ -62,7 +62,11 @@ export class RethnetEthContext implements EthContextAdapter {
       common
     );
 
-    this._mempool = new RethnetMemPool(this._state.asInner(), hardforkName);
+    this._mempool = new RethnetMemPool(
+      BigInt(config.blockGasLimit),
+      this._state.asInner(),
+      hardforkName
+    );
 
     this._miner = new RethnetMiner(
       new BlockMiner(

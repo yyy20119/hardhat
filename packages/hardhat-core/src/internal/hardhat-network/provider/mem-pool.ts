@@ -1,6 +1,17 @@
 import { TypedTransaction } from "@nomicfoundation/ethereumjs-tx";
+import { Address } from "@nomicfoundation/ethereumjs-util";
 
 export interface MemPoolAdapter {
+  getBlockGasLimit(): Promise<bigint>;
+
+  setBlockGasLimit(blockGasLimit: bigint): Promise<void>;
+
+  /**
+   * Returns the next available nonce for an address, taking into account
+   * its pending transactions.
+   */
+  getNextPendingNonce(accountAddress: Address): Promise<bigint>;
+
   addTransaction(transaction: TypedTransaction): Promise<void>;
 
   /**

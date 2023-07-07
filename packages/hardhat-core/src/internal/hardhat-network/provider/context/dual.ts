@@ -1,19 +1,19 @@
 import { Common } from "@nomicfoundation/ethereumjs-common";
+import { DualBlockMiner } from "../miner/dual";
+import { DualMemPool } from "../mem-pool/dual";
+import { HardhatBlockchainInterface } from "../types/HardhatBlockchainInterface";
+import { makeCommon } from "../utils/makeCommon";
+import { RandomBufferGenerator } from "../utils/random";
+import { DualModeBlockBuilder } from "../vm/block-builder/dual";
+import { BuildBlockOpts, BlockBuilderAdapter } from "../vm/block-builder";
+import { DualModeAdapter } from "../vm/dual";
+import { VMAdapter } from "../vm/vm-adapter";
+import { EthereumJSAdapter } from "../vm/ethereumjs";
 import { EthContextAdapter } from "../context";
 import { MemPoolAdapter } from "../mem-pool";
 import { BlockMinerAdapter } from "../miner";
-import { BuildBlockOpts, BlockBuilderAdapter } from "../vm/block-builder";
-import { VMAdapter } from "../vm/vm-adapter";
-import { DualModeBlockBuilder } from "../vm/block-builder/dual";
-import { HardhatBlockchainInterface } from "../types/HardhatBlockchainInterface";
-import { DualBlockMiner } from "../miner/dual";
-import { DualMemPool } from "../mem-pool/dual";
-import { DualModeAdapter } from "../vm/dual";
 import { NodeConfig, isForkedNodeConfig } from "../node-types";
-import { RandomBufferGenerator } from "../utils/random";
-import { makeCommon } from "../utils/makeCommon";
 import { HardhatEthContext } from "./hardhat";
-import { EthereumJSAdapter } from "../vm/ethereumjs";
 import { RethnetEthContext } from "./rethnet";
 
 export class DualEthContext implements EthContextAdapter {

@@ -170,7 +170,20 @@ async function _createBlockchain(
       forkClient.getNetworkId()
     );
 
-    const blockchain = new ForkBlockchain(forkClient, forkBlockNumber, common);
+    let hardforkActivations: HardforkHistoryConfig = new Map();
+
+    if (config.chains.has(forkClient.getNetworkId())) {
+      hardforkActivations = config.chains.get(
+        forkClient.getNetworkId()
+      )!.hardforkHistory;
+    }
+
+    const blockchain = new ForkBlockchain(
+      forkClient,
+      forkBlockNumber,
+      hardforkActivations,
+      common
+    );
 
     const initialBlockTimeOffset = BigInt(
       getDifferenceInSeconds(new Date(forkBlockTimestamp), new Date())
@@ -194,14 +207,6 @@ async function _createBlockchain(
           );
         }
       }
-    }
-
-    let hardforkActivations: HardforkHistoryConfig = new Map();
-
-    if (config.chains.has(forkClient.getNetworkId())) {
-      hardforkActivations = config.chains.get(
-        forkClient.getNetworkId()
-      )!.hardforkHistory;
     }
 
     return {

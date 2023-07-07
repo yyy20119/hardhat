@@ -26,7 +26,6 @@ import EventEmitter from "events";
 
 import * as BigIntUtils from "../../util/bigint";
 import { CompilerInput, CompilerOutput } from "../../../types";
-import { HardforkHistoryConfig } from "../../../types/config";
 import { HARDHAT_NETWORK_DEFAULT_MAX_PRIORITY_FEE_PER_GAS } from "../../core/config/default-config";
 import { assertHardhatInvariant, HardhatError } from "../../core/errors";
 import { RpcDebugTracingConfig } from "../../core/jsonrpc/types/input/debugTraceTransaction";
@@ -38,11 +37,11 @@ import {
 } from "../../core/providers/errors";
 import { HardhatMetadata } from "../../core/jsonrpc/types/output/metadata";
 import { Reporter } from "../../sentry/reporter";
+import { getDifferenceInSeconds } from "../../util/date";
 import {
   getHardforkName,
   hardforkGte,
   HardforkName,
-  selectHardfork,
 } from "../../util/hardforks";
 import { getPackageJson } from "../../util/packageInfo";
 import { createModelsAndDecodeBytecodes } from "../stack-traces/compiler-to-model";
@@ -72,6 +71,7 @@ import {
   FilterParams,
   GatherTracesResult,
   GenesisAccount,
+  isForkedNodeConfig,
   MineBlockResult,
   NodeConfig,
   RunCallResult,
@@ -114,13 +114,27 @@ export class HardhatNode extends EventEmitter {
       RandomBufferGenerator.create("randomMixHashSeed");
     const context = await createContext(config, prevRandaoGenerator);
 
+    const initialBlockTimeOffset = isForkedNodeConfig(config)
+      ? BigInt(
+          getDifferenceInSeconds(
+            new Date(
+              (
+                (await context.blockchain().getLatestBlock()).header.timestamp *
+                1000n
+              ).toString()
+            ),
+            new Date()
+          )
+        )
+      : config.initialDate !== undefined
+      ? BigInt(getDifferenceInSeconds(config.initialDate, new Date()))
+      : 0n;
+
     const {
       automine,
       genesisAccounts,
       tracingConfig,
       minGasPrice,
-      mempoolOrder,
-      networkId,
       chainId,
       allowBlocksWithSameTimestamp,
     } = config;
@@ -137,21 +151,17 @@ export class HardhatNode extends EventEmitter {
       context,
       instanceId,
       common,
-      hardforkActivations,
       automine,
       minGasPrice,
       initialBlockTimeOffset,
-      mempoolOrder,
       config.coinbase,
       genesisAccounts,
-      networkId,
       chainId,
       hardfork,
       prevRandaoGenerator,
       allowUnlimitedContractSize,
       allowBlocksWithSameTimestamp,
-      tracingConfig,
-      forkNetworkId
+      tracingConfig
     );
 
     return [common, node];
@@ -181,7 +191,6 @@ export class HardhatNode extends EventEmitter {
     private readonly _context: EthContextAdapter,
     private readonly _instanceId: bigint,
     private readonly _common: Common,
-    private _hardforkActivations: HardforkHistoryConfig,
     private _automine: boolean,
     private _minGasPrice: bigint,
     private _blockTimeOffsetSeconds: bigint = 0n,
@@ -506,10 +515,7 @@ export class HardhatNode extends EventEmitter {
   }
 
   public async getAccountNextPendingNonce(address: Address): Promise<bigint> {
-    return this._txPool.getNextPendingNonce(
-      this._context.vm().getAccount.bind(this._context.vm()),
-      address
-    );
+    return this._context.memPool().getNextPendingNonce(address);
   }
 
   public async getCodeFromTrace(
@@ -550,8 +556,8 @@ export class HardhatNode extends EventEmitter {
     return [...this._localAccounts.keys()];
   }
 
-  public getBlockGasLimit(): bigint {
-    return this._txPool.getBlockGasLimit();
+  public async getBlockGasLimit(): Promise<bigint> {
+    return this._context.memPool().getBlockGasLimit();
   }
 
   public async estimateGas(
@@ -630,7 +636,7 @@ export class HardhatNode extends EventEmitter {
     // manage errors
     if (result.exit.isError()) {
       return {
-        estimation: this.getBlockGasLimit(),
+        estimation: await this.getBlockGasLimit(),
         trace: vmTrace,
         error: await this._manageErrors(result, vmTrace, vmTracerError),
         consoleLogMessages,
@@ -1097,7 +1103,11 @@ export class HardhatNode extends EventEmitter {
   }
 
   public async setBlockGasLimit(gasLimit: bigint | number) {
-    this._txPool.setBlockGasLimit(gasLimit);
+    if (typeof gasLimit === "number") {
+      gasLimit = BigInt(gasLimit);
+    }
+
+    await this._context.memPool().setBlockGasLimit(gasLimit);
     await this._context.memPool().update();
   }
 
@@ -1926,7 +1936,7 @@ export class HardhatNode extends EventEmitter {
       blockNumberOrPending,
       txParams,
       initialEstimation,
-      this.getBlockGasLimit()
+      await this.getBlockGasLimit()
     );
   }
 
@@ -2138,39 +2148,15 @@ export class HardhatNode extends EventEmitter {
   }
 
   public isEip1559Active(blockNumberOrPending?: bigint | "pending"): boolean {
-    if (
-      blockNumberOrPending !== undefined &&
-      blockNumberOrPending !== "pending"
-    ) {
-      return this._common.hardforkGteHardfork(
-        selectHardfork(
-          this._forkBlockNumber,
-          this._common.hardfork(),
-          this._hardforkActivations,
-          blockNumberOrPending
-        ),
-        "london"
-      );
-    }
-    return this._common.gteHardfork("london");
+    return this._context
+      .blockchain()
+      .blockSupportsHardfork(HardforkName.LONDON, blockNumberOrPending);
   }
 
   public isEip4895Active(blockNumberOrPending?: bigint | "pending"): boolean {
-    if (
-      blockNumberOrPending !== undefined &&
-      blockNumberOrPending !== "pending"
-    ) {
-      return this._common.hardforkGteHardfork(
-        selectHardfork(
-          blockNumberOrPending,
-          this._common.hardfork(),
-          this._hardforkActivations,
-          blockNumberOrPending
-        ),
-        "shanghai"
-      );
-    }
-    return this._common.gteHardfork("shanghai");
+    return this._context
+      .blockchain()
+      .blockSupportsHardfork(HardforkName.SHANGHAI, blockNumberOrPending);
   }
 
   public isPostMergeHardfork(): boolean {

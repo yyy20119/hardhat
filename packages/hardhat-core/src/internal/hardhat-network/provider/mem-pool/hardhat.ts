@@ -52,6 +52,17 @@ export class HardhatMemPool implements MemPoolAdapter {
     this._deserializeTransaction = (tx) => _deserializeTransaction(tx, common);
   }
 
+  public async getBlockGasLimit(): Promise<bigint> {
+    return BigInt(this._state.get("blockGasLimit"));
+  }
+
+  public async setBlockGasLimit(blockGasLimit: bigint): Promise<void> {
+    this._state = this._state.set(
+      "blockGasLimit",
+      BigIntUtils.toHex(blockGasLimit)
+    );
+  }
+
   public async addTransaction(tx: TypedTransaction): Promise<void> {
     const senderAddress = _getSenderAddress(tx);
     const sender = await this._stateManager.getAccount(senderAddress);
@@ -146,7 +157,12 @@ export class HardhatMemPool implements MemPoolAdapter {
         const txNonce = deserializedTx.data.nonce;
 
         if (
-          !this._isTxValid(deserializedTx, txNonce, senderNonce, senderBalance)
+          !(await this._isTxValid(
+            deserializedTx,
+            txNonce,
+            senderNonce,
+            senderBalance
+          ))
         ) {
           newPending = this._removeTx(newPending, address, deserializedTx);
 
@@ -174,7 +190,12 @@ export class HardhatMemPool implements MemPoolAdapter {
         const txNonce = deserializedTx.data.nonce;
 
         if (
-          !this._isTxValid(deserializedTx, txNonce, senderNonce, senderBalance)
+          !(await this._isTxValid(
+            deserializedTx,
+            txNonce,
+            senderNonce,
+            senderBalance
+          ))
         ) {
           newQueued = this._removeTx(newQueued, address, deserializedTx);
         }
@@ -262,27 +283,17 @@ export class HardhatMemPool implements MemPoolAdapter {
     return undefined;
   }
 
-  /**
-   * Returns the next available nonce for an address, taking into account
-   * its pending transactions.
-   */
-  public async getNextPendingNonce(
-    accountAddress: Address
-  ): Promise<bigint | undefined> {
+  public async getNextPendingNonce(accountAddress: Address): Promise<bigint> {
     const pendingTxs = this._getPending().get(accountAddress.toString());
     const lastPendingTx = pendingTxs?.last(undefined);
 
     if (lastPendingTx === undefined) {
-      return undefined;
+      return (await this._stateManager.getAccount(accountAddress)).nonce;
     }
 
     const lastPendingTxNonce =
       this._deserializeTransaction(lastPendingTx).data.nonce;
     return lastPendingTxNonce + 1n;
-  }
-
-  public getBlockGasLimit(): bigint {
-    return BigInt(this._state.get("blockGasLimit"));
   }
 
   private _removeSnapshotsAfter(snapshotId: number): void {
@@ -402,7 +413,7 @@ export class HardhatMemPool implements MemPoolAdapter {
       );
     }
 
-    const blockGasLimit = this.getBlockGasLimit();
+    const blockGasLimit = await this.getBlockGasLimit();
 
     if (gasLimit > blockGasLimit) {
       throw new InvalidInputError(
@@ -486,16 +497,16 @@ export class HardhatMemPool implements MemPoolAdapter {
     );
   }
 
-  private _isTxValid(
+  private async _isTxValid(
     tx: OrderedTransaction,
     txNonce: bigint,
     senderNonce: bigint,
     senderBalance: bigint
-  ): boolean {
+  ): Promise<boolean> {
     const txGasLimit = tx.data.gasLimit;
 
     return (
-      txGasLimit <= this.getBlockGasLimit() &&
+      txGasLimit <= (await this.getBlockGasLimit()) &&
       txNonce >= senderNonce &&
       tx.data.getUpfrontCost() <= senderBalance
     );

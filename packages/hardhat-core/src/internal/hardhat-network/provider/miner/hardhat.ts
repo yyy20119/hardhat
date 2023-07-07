@@ -34,7 +34,7 @@ export class HardhatBlockMiner implements BlockMinerAdapter {
     const isPostMerge = hardforkGte(this._hardfork, HardforkName.MERGE);
 
     const headerData: HeaderData = {
-      gasLimit: this._memPool.getBlockGasLimit(),
+      gasLimit: await this._memPool.getBlockGasLimit(),
       coinbase: this._coinbase,
       nonce: isPostMerge ? "0x0000000000000000" : "0x0000000000000042",
       timestamp: blockTimestamp,
@@ -55,7 +55,7 @@ export class HardhatBlockMiner implements BlockMinerAdapter {
     });
 
     try {
-      const blockGasLimit = this._memPool.getBlockGasLimit();
+      const blockGasLimit = await this._memPool.getBlockGasLimit();
       const minTxFee = this._common.param("gasPrices", "tx");
       const pendingTxs = this._memPool.getOrderedPendingTransactions();
       const transactionQueue = new TransactionQueue(
