@@ -1,3 +1,4 @@
+mod fork;
 mod in_memory;
 
 use std::fmt::Debug;
@@ -5,7 +6,7 @@ use std::fmt::Debug;
 use rethnet_eth::{block::Block, U256};
 use revm::db::BlockHashRef;
 
-pub use in_memory::InMemoryBlockchain;
+pub use self::{fork::ForkBlockchain, in_memory::InMemoryBlockchain};
 
 /// Combinatorial error for the blockchain API.
 #[derive(Debug, thiserror::Error)]
