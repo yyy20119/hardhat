@@ -7,7 +7,8 @@ use itertools::Itertools;
 use revm_primitives::{AccountInfo, Address, Bytecode, B256, KECCAK_EMPTY, U256};
 
 use super::{
-    eth, jsonrpc,
+    eth,
+    jsonrpc::{self, Request},
     methods::{GetLogsInput, MethodInvocation},
     BlockSpec, ZeroXPrefixedBytes,
 };
@@ -39,18 +40,6 @@ pub enum RpcClientError {
     /// Some other error from an underlying dependency
     #[error(transparent)]
     OtherError(#[from] io::Error),
-}
-
-/// a JSON-RPC method invocation request
-#[derive(serde::Deserialize, serde::Serialize)]
-pub struct Request<MethodInvocation> {
-    /// JSON-RPC version
-    pub version: jsonrpc::Version,
-    /// the method to invoke, with its parameters
-    #[serde(flatten)]
-    pub method: MethodInvocation,
-    /// the request ID, to be correlated via the response's ID
-    pub id: jsonrpc::Id,
 }
 
 #[derive(Debug)]

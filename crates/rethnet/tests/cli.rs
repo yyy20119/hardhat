@@ -8,10 +8,7 @@ use predicates::str::contains;
 
 use rethnet::DEFAULT_ACCOUNTS;
 use rethnet_eth::{
-    remote::{
-        client::Request as RpcRequest, jsonrpc, methods::MethodInvocation as EthMethodInvocation,
-        BlockSpec,
-    },
+    remote::{jsonrpc, methods::MethodInvocation as EthMethodInvocation, BlockSpec},
     Address, Bytes, U256,
 };
 use rethnet_rpc_server::{HardhatMethodInvocation, MethodInvocation};
@@ -61,12 +58,12 @@ async fn node() -> Result<(), Box<dyn std::error::Error>> {
         &method_invocations
             .iter()
             .enumerate()
-            .map(|(id, method)| RpcRequest {
+            .map(|(id, method)| jsonrpc::Request {
                 version: jsonrpc::Version::V2_0,
                 id: jsonrpc::Id::Num(id.try_into().unwrap()),
                 method: method.clone(),
             })
-            .collect::<Vec<RpcRequest<MethodInvocation>>>(),
+            .collect::<Vec<jsonrpc::Request<MethodInvocation>>>(),
     )?;
 
     // spawn the server process:

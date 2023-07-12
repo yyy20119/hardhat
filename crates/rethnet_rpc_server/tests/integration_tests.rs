@@ -4,10 +4,7 @@ use hashbrown::HashMap;
 use rethnet_eth::remote::ZeroXPrefixedBytes;
 
 use rethnet_eth::{
-    remote::{
-        client::Request as RpcRequest, jsonrpc, methods::MethodInvocation as EthMethodInvocation,
-        BlockSpec,
-    },
+    remote::{jsonrpc, methods::MethodInvocation as EthMethodInvocation, BlockSpec},
     Address, Bytes, U256,
 };
 use rethnet_evm::{AccountInfo, KECCAK_EMPTY};
@@ -43,7 +40,10 @@ async fn start_server() -> SocketAddr {
     address
 }
 
-async fn submit_request(address: &SocketAddr, request: &RpcRequest<MethodInvocation>) -> String {
+async fn submit_request(
+    address: &SocketAddr,
+    request: &jsonrpc::Request<MethodInvocation>,
+) -> String {
     let url = format!("http://{address}/");
     let body = serde_json::to_string(&request).expect("should serialize request to JSON");
     reqwest::Client::new()
@@ -60,7 +60,7 @@ async fn submit_request(address: &SocketAddr, request: &RpcRequest<MethodInvocat
 
 #[tokio::test]
 async fn test_get_balance_nonexistent_account() {
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetBalance(
@@ -70,7 +70,7 @@ async fn test_get_balance_nonexistent_account() {
     };
 
     let expected_response = jsonrpc::Response::<U256> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Error {
             error: jsonrpc::Error {
@@ -90,7 +90,7 @@ async fn test_get_balance_nonexistent_account() {
 
 #[tokio::test]
 async fn test_get_balance_success() {
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetBalance(
@@ -100,7 +100,7 @@ async fn test_get_balance_success() {
     };
 
     let expected_response = jsonrpc::Response::<U256> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Success { result: U256::ZERO },
     };
@@ -114,7 +114,7 @@ async fn test_get_balance_success() {
 
 #[tokio::test]
 async fn test_get_code_success() {
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetCode(
@@ -124,7 +124,7 @@ async fn test_get_code_success() {
     };
 
     let expected_response = jsonrpc::Response::<ZeroXPrefixedBytes> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Success {
             result: ZeroXPrefixedBytes::from(Bytes::from_static(b"\0")),
@@ -140,7 +140,7 @@ async fn test_get_code_success() {
 
 #[tokio::test]
 async fn test_get_storage_success() {
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetStorageAt(
@@ -151,7 +151,7 @@ async fn test_get_storage_success() {
     };
 
     let expected_response = jsonrpc::Response::<U256> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Success { result: U256::ZERO },
     };
@@ -165,7 +165,7 @@ async fn test_get_storage_success() {
 
 #[tokio::test]
 async fn test_get_transaction_count_nonexistent_account() {
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetTransactionCount(
@@ -175,7 +175,7 @@ async fn test_get_transaction_count_nonexistent_account() {
     };
 
     let expected_response = jsonrpc::Response::<U256> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Error {
             error: jsonrpc::Error {
@@ -195,7 +195,7 @@ async fn test_get_transaction_count_nonexistent_account() {
 
 #[tokio::test]
 async fn test_get_transaction_count_success() {
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetTransactionCount(
@@ -205,7 +205,7 @@ async fn test_get_transaction_count_success() {
     };
 
     let expected_response = jsonrpc::Response::<U256> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Success { result: U256::ZERO },
     };
@@ -224,7 +224,7 @@ async fn test_set_balance_success() {
     let address = Address::from_low_u64_ne(1);
     let new_balance = U256::from(100);
 
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Hardhat(HardhatMethodInvocation::SetBalance(
@@ -234,7 +234,7 @@ async fn test_set_balance_success() {
     };
 
     let expected_response = jsonrpc::Response::<()> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Success { result: () },
     };
@@ -245,7 +245,7 @@ async fn test_set_balance_success() {
 
     assert_eq!(actual_response, expected_response);
 
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetBalance(
@@ -255,7 +255,7 @@ async fn test_set_balance_success() {
     };
 
     let expected_response = jsonrpc::Response::<U256> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Success {
             result: new_balance,
@@ -276,14 +276,14 @@ async fn test_set_nonce_success() {
     let address = Address::from_low_u64_ne(1);
     let new_nonce = U256::from(100);
 
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Hardhat(HardhatMethodInvocation::SetNonce(address, new_nonce)),
     };
 
     let expected_response = jsonrpc::Response::<()> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Success { result: () },
     };
@@ -294,7 +294,7 @@ async fn test_set_nonce_success() {
 
     assert_eq!(actual_response, expected_response);
 
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetTransactionCount(
@@ -304,7 +304,7 @@ async fn test_set_nonce_success() {
     };
 
     let expected_response = jsonrpc::Response::<U256> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Success { result: new_nonce },
     };
@@ -323,7 +323,7 @@ async fn test_set_code_success() {
     let address = Address::from_low_u64_ne(1);
     let new_code = ZeroXPrefixedBytes::from(Bytes::from_static(b"deadbeef"));
 
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Hardhat(HardhatMethodInvocation::SetCode(
@@ -333,7 +333,7 @@ async fn test_set_code_success() {
     };
 
     let expected_response = jsonrpc::Response::<()> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Success { result: () },
     };
@@ -344,14 +344,14 @@ async fn test_set_code_success() {
 
     assert_eq!(actual_response, expected_response);
 
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetCode(address, BlockSpec::latest())),
     };
 
     let expected_response = jsonrpc::Response::<ZeroXPrefixedBytes> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Success {
             result: new_code.clone(),
@@ -372,7 +372,7 @@ async fn test_set_storage_at_success() {
     let address = Address::from_low_u64_ne(1);
     let new_storage_value = U256::from(100);
 
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Hardhat(HardhatMethodInvocation::SetStorageAt(
@@ -383,7 +383,7 @@ async fn test_set_storage_at_success() {
     };
 
     let expected_response = jsonrpc::Response::<()> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Success { result: () },
     };
@@ -394,7 +394,7 @@ async fn test_set_storage_at_success() {
 
     assert_eq!(actual_response, expected_response);
 
-    let request = RpcRequest {
+    let request = jsonrpc::Request {
         version: jsonrpc::Version::V2_0,
         id: jsonrpc::Id::Num(0),
         method: MethodInvocation::Eth(EthMethodInvocation::GetStorageAt(
@@ -405,7 +405,7 @@ async fn test_set_storage_at_success() {
     };
 
     let expected_response = jsonrpc::Response::<U256> {
-        jsonrpc: request.version,
+        version: request.version,
         id: request.id.clone(),
         data: jsonrpc::ResponseData::Success {
             result: new_storage_value,

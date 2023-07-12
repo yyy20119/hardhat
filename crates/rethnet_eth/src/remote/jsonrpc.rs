@@ -18,11 +18,28 @@ pub struct Error {
     pub data: Option<serde_json::Value>,
 }
 
-/// Represents a JSON-RPC 2.0 response.
+/// Represents a JSON-RPC request.
+///
+/// The generic `Method` must be an enum that (de)serializes its tag as "method"
+/// and its content as "params".
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct Request<Method> {
+    /// JSON-RPC version
+    #[serde(rename = "jsonrpc")]
+    pub version: Version,
+    /// the method to invoke, with its parameters
+    #[serde(flatten)]
+    pub method: Method,
+    /// the request ID, to be correlated via the response's ID
+    pub id: Id,
+}
+
+/// Represents a JSON-RPC response.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Response<T> {
     /// A String specifying the version of the JSON-RPC protocol.
-    pub jsonrpc: Version,
+    #[serde(rename = "jsonrpc")]
+    pub version: Version,
     //
     /// Correlation id.
     ///

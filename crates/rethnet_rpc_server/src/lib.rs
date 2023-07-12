@@ -13,9 +13,8 @@ use tracing::{event, Level};
 
 use rethnet_eth::{
     remote::{
-        client::{Request as RpcRequest, RpcClient},
-        jsonrpc,
-        jsonrpc::{Response, ResponseData},
+        client::RpcClient,
+        jsonrpc::{self, Response, ResponseData},
         methods::MethodInvocation as EthMethodInvocation,
         BlockSpec, BlockTag, Eip1898BlockSpec,
     },
@@ -377,14 +376,14 @@ async fn handle_set_storage_at(
 
 async fn handle_request(
     state: StateType,
-    request: &RpcRequest<MethodInvocation>,
+    request: &jsonrpc::Request<MethodInvocation>,
 ) -> Result<serde_json::Value, String> {
     fn response<T>(id: &jsonrpc::Id, data: ResponseData<T>) -> Result<serde_json::Value, String>
     where
         T: serde::Serialize,
     {
         let response: Response<T> = Response {
-            jsonrpc: jsonrpc::Version::V2_0,
+            version: jsonrpc::Version::V2_0,
             id: id.clone(),
             data,
         };
@@ -396,7 +395,7 @@ async fn handle_request(
     }
 
     match request {
-        RpcRequest {
+        jsonrpc::Request {
             version,
             id,
             method: _,
@@ -406,7 +405,7 @@ async fn handle_request(
                 "unsupported JSON-RPC version '{version:?}'"
             )),
         ),
-        RpcRequest {
+        jsonrpc::Request {
             version: _,
             id,
             method,
@@ -474,9 +473,9 @@ async fn handle_request(
 #[serde(untagged)]
 pub enum Request {
     /// A single JSON-RPC request
-    Single(RpcRequest<MethodInvocation>),
+    Single(jsonrpc::Request<MethodInvocation>),
     /// A batch of requests
-    Batch(Vec<RpcRequest<MethodInvocation>>),
+    Batch(Vec<jsonrpc::Request<MethodInvocation>>),
 }
 
 async fn router(state: StateType) -> Router {
@@ -485,7 +484,7 @@ async fn router(state: StateType) -> Router {
             "/",
             axum::routing::post(
                 |State(state): State<StateType>, payload: Json<Request>| async move {
-                    let requests: Vec<RpcRequest<MethodInvocation>> = match payload {
+                    let requests: Vec<jsonrpc::Request<MethodInvocation>> = match payload {
                         Json(Request::Single(request)) => vec![request],
                         Json(Request::Batch(requests)) => requests,
                     };
