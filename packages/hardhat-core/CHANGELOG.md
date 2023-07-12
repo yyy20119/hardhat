@@ -1,5 +1,16 @@
 # hardhat
 
+## 2.17.0
+
+### Minor Changes
+
+- 01f1e3f7e: Dropped support for node v14 and added support for node v20
+
+### Patch Changes
+
+- 2b0ac92a3: Fixed an issue in the compilation pipeline where a valid build-info file was mistakenly deleted
+- c0aa10c2d: Added support for solc 0.8.19 and 0.8.20
+
 ## 2.16.1
 
 ### Patch Changes
